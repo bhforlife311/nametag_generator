@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>명찰 자동 생성기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+:root{--bg:#0f0f11;--surface:#18181c;--surface2:#222228;--border:#2e2e38;--accent:#7c6af7;--accent2:#a78bfa;--green:#34d399;--amber:#fbbf24;--text:#e8e8f0;--muted:#6b6b80;--r:12px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;}
+header{padding:20px 34px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.lm{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+header h1{font-size:16px;font-weight:700;letter-spacing:-.3px;}
+header p{font-size:12px;color:var(--muted);margin-left:4px;}
+.layout{display:grid;grid-template-columns:400px 1fr;flex:1;overflow:hidden;}
+.panel{background:var(--surface);border-right:1px solid var(--border);padding:22px;overflow-y:auto;display:flex;flex-direction:column;gap:20px;}
+.stitle{font-size:10px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.dz{border:2px dashed var(--border);border-radius:var(--r);cursor:pointer;transition:all .18s;position:relative;}
+.dz:hover,.dz.over{border-color:var(--accent);background:rgba(124,106,247,.06);}
+.dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.logo-dz{padding:16px;text-align:center;min-height:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;}
+.logo-dz .di{font-size:24px;} .logo-dz .dl{font-size:12px;color:var(--muted);} .logo-dz .ds{font-size:11px;color:var(--accent2);}
+#logo-preview{max-height:44px;max-width:100%;object-fit:contain;display:none;}
+.excel-dz{padding:13px 15px;display:flex;align-items:center;gap:11px;}
+.excel-dz:hover,.excel-dz.over{border-color:var(--green);background:rgba(52,211,153,.05);}
+.ei{font-size:22px;flex-shrink:0;} .et p{font-size:13px;font-weight:600;} .et span{font-size:11px;color:var(--muted);}
+/* 폰트 슬롯 */
+.font-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
+.font-slot{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;position:relative;transition:all .15s;}
+.font-slot:hover{border-color:var(--amber);}
+.font-slot input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.fs-label{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.5px;margin-bottom:4px;}
+.fs-name{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.font-slot.ok{border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.05);}
+.font-slot.ok .fs-label{color:var(--green);}
+.font-prev{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 13px;}
+.fp-lbl{font-size:9px;color:var(--muted);letter-spacing:.5px;margin-bottom:5px;}
+#fp-name{font-size:26px;font-weight:900;} #fp-footer{font-size:12px;color:var(--muted);margin-top:2px;}
+#font-status{margin-top:5px;font-size:10px;color:var(--muted);}
+/* 필드 */
+.field{display:flex;flex-direction:column;gap:5px;}
+label{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.3px;}
+input[type="text"],select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:13px;outline:none;transition:border-color .2s;width:100%;}
+input[type="text"]:focus,select:focus{border-color:var(--accent);}
+select option{background:var(--surface2);}
+.col-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+/* 미리보기 테이블 */
+.pbox{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.phead{padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.pcnt{background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+.pscroll{max-height:130px;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{padding:5px 11px;background:var(--surface);text-align:left;color:var(--muted);font-weight:600;position:sticky;top:0;}
+td{padding:5px 11px;border-top:1px solid var(--border);}
+tr:hover td{background:rgba(255,255,255,.02);}
+/* 버튼 */
+.gen-btn{background:var(--accent);color:#fff;border:none;border-radius:var(--r);padding:12px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;width:100%;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.gen-btn:hover:not(:disabled){background:#6b58f0;transform:translateY(-1px);box-shadow:0 8px 24px rgba(124,106,247,.35);}
+.gen-btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;}
+/* 오른쪽 */
+.rpanel{background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:28px;gap:16px;overflow-y:auto;}
+.rptitle{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);align-self:flex-start;}
+.cwrap{background:#fff;border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;width:100%;max-width:560px;}
+#badge-canvas{display:block;width:100%;height:auto;}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);text-align:center;}
+.empty .bi{font-size:44px;opacity:.25;} .empty p{font-size:13px;}
+.dl-btn{background:var(--green);color:#0a2018;border:none;border-radius:var(--r);padding:10px 20px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all .2s;align-self:center;}
+.dl-btn:hover{background:#2cbb84;transform:translateY(-1px);}
+.pnav{display:flex;align-items:center;gap:11px;font-size:13px;color:var(--muted);}
+.pbtn{background:var(--surface2);border:1px solid var(--border);color:var(--text);width:29px;height:29px;border-radius:7px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.pbtn:hover{border-color:var(--accent);color:var(--accent);} .pbtn:disabled{opacity:.3;cursor:not-allowed;}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 15px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none;animation:su .3s ease;max-width:300px;}
+@keyframes su{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="lm">🏷</div>
+  <h1>명찰 자동 생성기</h1>
+  <p>— 엑셀 명단 → PDF 명찰 원클릭 자동화</p>
+</header>
+<div class="layout">
+<div class="panel">
+
+
+  <!-- 샘플 다운로드 배너 -->
+  <div class="sample-banner">
+    <div class="sb-icon">📥</div>
+    <div class="sb-text">
+      <p>표준 양식 엑셀 다운로드</p>
+      <span>이 양식으로 제출받으면 컬럼 설정 없이 자동 인식됩니다</span>
+    </div>
+    <button class="sample-btn" onclick="downloadSample()">⬇ 샘플 다운로드</button>
+  </div>
+
+  <!-- 표준 모드 토글 -->
+  <div>
+    <div class="mode-toggle">
+      <label for="std-toggle">
+        <span class="toggle-sw">
+          <input type="checkbox" id="std-toggle" checked onchange="toggleStdMode()">
+          <span class="toggle-track"></span>
+        </span>
+        표준 양식 자동 인식 모드
+      </label>
+      <span class="mode-badge" id="mode-badge">표준 모드</span>
+    </div>
+    <div class="std-cols" id="std-info">
+      <div class="sc-row"><span class="sc-tag req">필수</span><span class="sc-name">이름</span><span class="sc-desc">명찰 중앙에 크게 표시</span></div>
+      <div class="sc-row"><span class="sc-tag opt">선택</span><span class="sc-name">번호</span><span class="sc-desc">이름 아래 괄호 표시 (예: 1-1)</span></div>
+      <div class="sc-row"><span class="sc-tag opt">선택</span><span class="sc-name">분임</span><span class="sc-desc">그룹 구분용 (명찰에 미출력)</span></div>
+      <div style="margin-top:5px;font-size:10px;color:var(--muted)">↑ 헤더가 정확히 <b>이름·번호·분임</b>이면 업로드 즉시 자동 매핑됩니다</div>
+    </div>
+  </div>
+
+  <!-- 로고 -->
+  <div>
+    <p class="stitle">① 고객사 로고</p>
+    <div class="dz logo-dz" id="logo-dz">
+      <input type="file" id="logo-input" accept="image/*">
+      <img id="logo-preview" alt="">
+      <div id="logo-ph"><div class="di">🏢</div><p class="dl">로고 이미지 드래그 또는 클릭</p><p class="ds">PNG · JPG · SVG · WEBP</p></div>
+    </div>
+  
+  </div>
+
+  <!-- 폰트 -->
+  <div>
+    <p class="stitle">② 명찰 폰트 <span style="color:var(--amber);font-size:9px;letter-spacing:.4px">로컬 폰트 업로드</span></p>
+    <div class="font-grid">
+      <div class="font-slot" id="slot-bold">
+        <input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="handleFont(event,'bold')">
+        <div class="fs-label">BOLD — 이름·교번용</div>
+        <div class="fs-name" id="fname-bold">파일 선택 또는 드래그</div>
+      </div>
+      <div class="font-slot" id="slot-reg">
+        <input type="file" accept=".ttf,.otf,.woff,.woff2" onchange="handleFont(event,'regular')">
+        <div class="fs-label">REGULAR — 하단 텍스트</div>
+        <div class="fs-name" id="fname-reg">파일 선택 또는 드래그</div>
+      </div>
+    </div>
+    <div class="font-prev">
+      <div class="fp-lbl">FONT PREVIEW</div>
+      <div id="fp-name">홍길동</div>
+      <div id="fp-footer">공무원연금공단 · 3급 역량교육</div>
+      <div id="font-status">기본 폰트 사용 중 (Noto Sans KR)</div>
+    </div>
+  </div>
+
+  <!-- 교육 정보 -->
+  <div>
+    <p class="stitle">③ 교육 정보</p>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="field"><label>고객사명 (하단 첫째 줄)</label><input type="text" id="org-name" value="공무원연금공단"></div>
+      <div class="field"><label>교육과정명 (하단 둘째 줄)</label><input type="text" id="course-name" value="3 급 승진후보자 역량교육"></div>
+    </div>
+  </div>
+
+  <!-- 엑셀 -->
+  <div>
+    <p class="stitle">④ 참석자 명단 (엑셀)</p>
+    <div class="dz excel-dz" id="excel-dz">
+      <input type="file" id="excel-input" accept=".xlsx,.xls,.csv">
+      <div class="ei">📊</div>
+      <div class="et"><p id="excel-fn">엑셀 파일 업로드</p><span>.xlsx · .xls · .csv 지원</span></div>
+    </div>
+  </div>
+
+  <!-- 시트·컬럼 -->
+  <div id="sheet-sec" style="display:none">
+    <p class="stitle">⑤ 시트 및 컬럼 선택</p>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="field"><label>시트 선택</label><select id="sheet-sel"></select></div>
+      <div class="col-grid" id="col-selects" style="display:none">
+        <div class="field"><label>이름 컬럼 *</label><select id="name-col"></select></div>
+        <div class="field"><label>교번 컬럼 (선택)</label><select id="id-col"><option value="">— 없음 —</option></select></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 데이터 미리보기 -->
+  <div id="data-preview" style="display:none">
+    <div class="pbox">
+      <div class="phead"><span>데이터 미리보기</span><span class="pcnt" id="total-count">0명</span></div>
+      <div class="pscroll"><table id="preview-table"></table></div>
+    </div>
+  </div>
+
+
+  <!-- 출력 형식 -->
+  <div>
+    <p class="stitle">⑤ 출력 형식</p>
+    <div class="format-row">
+      <button class="fmt-btn active" id="fmt-pdf" onclick="setFormat('pdf')">
+        <span class="fi">📄</span>
+        <span class="fn">PDF</span>
+        <span class="fd">인쇄 정확도 최우선</span>
+      </button>
+      <button class="fmt-btn" id="fmt-ppt" onclick="setFormat('ppt')">
+        <span class="fi">📊</span>
+        <span class="fn">PPT</span>
+        <span class="fd">수동 수정 가능</span>
+      </button>
+    </div>
+  </div>
+
+  <button class="gen-btn" id="gen-btn" disabled onclick="generateBadges()"><span>🏷</span> 명찰 생성하기</button>
+</div>
+
+<!-- 오른쪽 -->
+<div class="rpanel">
+  <div class="empty" id="empty-state"><div class="bi">🏷️</div><p>설정을 완료하면<br>명찰 미리보기가 표시됩니다</p></div>
+  <p class="rptitle" id="preview-label" style="display:none">명찰 미리보기</p>
+  <div class="cwrap" id="canvas-wrap" style="display:none"><canvas id="badge-canvas"></canvas></div>
+  <div class="pnav" id="page-nav" style="display:none">
+    <button class="pbtn" id="prev-btn" onclick="changePage(-1)">‹</button>
+    <span id="page-info">1 / 1 페이지</span>
+    <button class="pbtn" id="next-btn" onclick="changePage(1)">›</button>
+  </div>
+  <button class="dl-btn" id="dl-btn" style="display:none" onclick="downloadPDF()">⬇ PDF 다운로드</button>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── 상태 ──
+let logoDataURL=null,participants=[],pages=[],currentPage=0,workbook=null;
+let stdMode=true, outputFormat='pdf';
+// 로고 가로 고정: 2.5cm (관리자 설정 — 사용자 변경 불가)
+const LOGO_W_CM=2.5;
+const STD_NAME='이름',STD_ID='번호';
+const SAMPLE_B64='UEsDBBQAAAAIAFKnmFxGx01IlQAAAM0AAAAQAAAAZG9jUHJvcHMvYXBwLnhtbE3PTQvCMAwG4L9SdreZih6kDkQ9ip68zy51hbYpbYT67+0EP255ecgboi6JIia2mEXxLuRtMzLHDUDWI/o+y8qhiqHke64x3YGMsRoPpB8eA8OibdeAhTEMOMzit7Dp1C5GZ3XPlkJ3sjpRJsPiWDQ6sScfq9wcChDneiU+ixNLOZcrBf+LU8sVU57mym/8ZAW/B7oXUEsDBBQAAAAIAFKnmFzWTQDN7wAAACsCAAARAAAAZG9jUHJvcHMvY29yZS54bWzNksFOwzAMhl8F5d66TcdAUdcLiBNISEwCcYscb4to2igxavf2tGHrhOABOMb+8/mz5Bq9wj7Qc+g9BbYUr0bXdlGh34gDs1cAEQ/kdMynRDc1d31wmqdn2IPX+KH3BLIo1uCItdGsYQZmfiGKpjaoMJDmPpzwBhe8/wxtghkEaslRxxHKvATRzBP9cWxruABmGFNw8btAZiGm6p/Y1AFxSo7RLqlhGPKhSrlphxLenh5f0rqZ7SLrDmn6Fa3io6eNOE9+re7utw+ikYVcZ8Uqk6utLNT1rapu3mfXH34XYdcbu7P/2Pgs2NTw6y6aL1BLAwQUAAAACABSp5hcmVycIxAGAACcJwAAEwAAAHhsL3RoZW1lL3RoZW1lMS54bWztWltz2jgUfu+v0Hhn9m0LxjaBtrQTc2l227SZhO1OH4URWI1seWSRhH+/RzYQy5YN7ZJNups8BCzp+85FR+foOHnz7i5i6IaIlPJ4YNkv29a7ty/e4FcyJBFBMBmnr/DACqVMXrVaaQDDOH3JExLD3IKLCEt4FMvWXOBbGi8j1uq0291WhGlsoRhHZGB9XixoQNBUUVpvXyC05R8z+BXLVI1lowETV0EmuYi08vlsxfza3j5lz+k6HTKBbjAbWCB/zm+n5E5aiOFUwsTAamc/VmvH0dJIgILJfZQFukn2o9MVCDINOzqdWM52fPbE7Z+Mytp0NG0a4OPxeDi2y9KLcBwE4FG7nsKd9Gy/pEEJtKNp0GTY9tqukaaqjVNP0/d93+ubaJwKjVtP02t33dOOicat0HgNvvFPh8Ouicar0HTraSYn/a5rpOkWaEJG4+t6EhW15UDTIABYcHbWzNIDll4p+nWUGtkdu91BXPBY7jmJEf7GxQTWadIZljRGcp2QBQ4AN8TRTFB8r0G2iuDCktJckNbPKbVQGgiayIH1R4Ihxdyv/fWXu8mkM3qdfTrOa5R/aasBp+27m8+T/HPo5J+nk9dNQs5wvCwJ8fsjW2GHJ247E3I6HGdCfM/29pGlJTLP7/kK6048Zx9WlrBdz8/knoxyI7vd9lh99k9HbiPXqcCzIteURiRFn8gtuuQROLVJDTITPwidhphqUBwCpAkxlqGG+LTGrBHgE323vgjI342I96tvmj1XoVhJ2oT4EEYa4pxz5nPRbPsHpUbR9lW83KOXWBUBlxjfNKo1LMXWeJXA8a2cPB0TEs2UCwZBhpckJhKpOX5NSBP+K6Xa/pzTQPCULyT6SpGPabMjp3QmzegzGsFGrxt1h2jSPHr+BfmcNQockRsdAmcbs0YhhGm78B6vJI6arcIRK0I+Yhk2GnK1FoG2camEYFoSxtF4TtK0EfxZrDWTPmDI7M2Rdc7WkQ4Rkl43Qj5izouQEb8ehjhKmu2icVgE/Z5ew0nB6ILLZv24fobVM2wsjvdH1BdK5A8mpz/pMjQHo5pZCb2EVmqfqoc0PqgeMgoF8bkePuV6eAo3lsa8UK6CewH/0do3wqv4gsA5fy59z6XvufQ9odK3NyN9Z8HTi1veRm5bxPuuMdrXNC4oY1dyzcjHVK+TKdg5n8Ds/Wg+nvHt+tkkhK+aWS0jFpBLgbNBJLj8i8rwKsQJ6GRbJQnLVNNlN4oSnkIbbulT9UqV1+WvuSi4PFvk6a+hdD4sz/k8X+e0zQszQ7dyS+q2lL61JjhK9LHMcE4eyww7ZzySHbZ3oB01+/ZdduQjpTBTl0O4GkK+A226ndw6OJ6YkbkK01KQb8P56cV4GuI52QS5fZhXbefY0dH758FRsKPvPJYdx4jyoiHuoYaYz8NDh3l7X5hnlcZQNBRtbKwkLEa3YLjX8SwU4GRgLaAHg69RAvJSVWAxW8YDK5CifEyMRehw55dcX+PRkuPbpmW1bq8pdxltIlI5wmmYE2eryt5lscFVHc9VW/Kwvmo9tBVOz/5ZrcifDBFOFgsSSGOUF6ZKovMZU77nK0nEVTi/RTO2EpcYvOPmx3FOU7gSdrYPAjK5uzmpemUxZ6by3y0MCSxbiFkS4k1d7dXnm5yueiJ2+pd3wWDy/XDJRw/lO+df9F1Drn723eP6bpM7SEycecURAXRFAiOVHAYWFzLkUO6SkAYTAc2UyUTwAoJkphyAmPoLvfIMuSkVzq0+OX9FLIOGTl7SJRIUirAMBSEXcuPv75Nqd4zX+iyBbYRUMmTVF8pDicE9M3JD2FQl867aJguF2+JUzbsaviZgS8N6bp0tJ//bXtQ9tBc9RvOjmeAes4dzm3q4wkWs/1jWHvky3zlw2zreA17mEyxDpH7BfYqKgBGrYr66r0/5JZw7tHvxgSCb/NbbpPbd4Ax81KtapWQrET9LB3wfkgZjjFv0NF+PFGKtprGtxtoxDHmAWPMMoWY434dFmhoz1YusOY0Kb0HVQOU/29QNaPYNNByRBV4xmbY2o+ROCjzc/u8NsMLEjuHti78BUEsDBBQAAAAIAFKnmFwVTs5hLAYAADotAAAYAAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sjZphb9s2EIb/iuACxfahtXg8SnKdBFhJDBuwAUGLbZ9VR06M2pYnK0s37MePpBRXXSS996FNTD93JE+Un2utq6e6+Xx+qKo2+XLYH8/Xi4e2Pb1bLs+bh+pQnt/Wp+ro39nWzaFs/cvmfnk+NVV5F4MO+yWlabY8lLvj4uYqjt02N1f1Y7vfHavbJjk/Hg5l8/f7al8/XS/U4nngw+7+oQ0Dy5urU3lffaza3063jX+1vGS52x2q43lXH5Om2l4vflDvnKEQEInfd9XTefB7Erbyqa4/hxc/310v0kVIfaySvz+e9js/GS2Stj79Um1bW+33PqFeJOWm3f1V3XrsevGpbtv6EN73y2zL1g9tm/qf6hjnrPaVZ/1iTi/gLkmfNOzxz37Bi8t+wqKGvz+v/MdYWF+oT+W5svX+j91d+3C9KBbJXbUtH/fth/rpp6ovlgn5NvX+HP9OnjpW8SLZPJ79avpgv4LD7tj9LL/0RZYEUB9A0gDdB+j/BVA6EcB9AMfKdFuJdXBlW95cNfVT0kQ67FcXz1kuFfCXdBOIWOUI+tHdMRy2j23j3935hO3N61eKCkr1Oklev+I859X69StDlNN6MMCmSNMwYFhnHAjFJosDqcnzQKyKwqyTf8OQSrM0DPlY8j9VocOrgrpILrhLlWZ5FlOladHlNqsspsoKP7AM8xdG9UyejQbxijlMZjRnq3U3e7egXLHqF8S5iYnNygd9R2Eky8z6+zCUq6zLEyYN4UQqLjPrZ864m8jniLtacbePtNDZ+mrZ+qsTSrnc+D/+qlwuDXWXhmYuDcVLQ5OX5ttKfjtXzPAeZfi26iMZLM4wvAQjGRzOkKehtMxkZium+4rRdMV0nEtPV4yLTMW5sjRWLkv9KRir3Hwm9UaNFQsESarVpeAXKV5Ug3E1OOYy05X324+HOs2KeF/727YYrcZ8JvWGxqoBgiTV6FJkuBoGV8Ogs9HfTYZ0wZfPmbFqzGdSb/RYNUCQpBpGejYyXI0MnY1CdZ/18QNurhrzmWj8TgFBkmpk0rOR42rk6GyQySlaStFXv41VYz4Tjd8pIEhSjVx6NgpcjQKcjWcJXqTorTvun/lMNH6ngCBJNQrp2VjhaqzA2fANhtEXl0Tzr8bPxnwmPX6ngCBJNVbSs6FSXI7AzJ+OdFX0nZDOZk8HSKXHbxYUJalIn0NwQJQSlERhtXRtKef9DVP4tmu0JPOp9Pgdg6JEJVHiU0KCkhA6JZxROvRL/GQdLclUqsH+IeJ65OUVHwivWxDR5fjm/b8pVtml9Z/pT5WgQVVTLeJgvxCxGHFK3EgqQSeppnq5wbIhYjHilLjjU4KWT001XYNlQ8RixClxa6YEvZma6o4Gy4aIxYhT4h5KCZooNdXGDJYNEYsRp8TNjhJ0O2qq3xgsGyIWI06JuxIlaEvUVGMwWDZELEacErcPJGgfaMreg/+0gIjFiCOx4kmgeJoy7GDZELEYcSTWMAk0TFCM7zFiMeJoSq8vly2wJGFLYsRixJHYkiSwJGFLYsRixJHYkiSwJGFLYsRixJHYkiSwJGFLYsRixJHYkiSwJGFLYsRixJHYkiSwJGFLYsRixJHYkiSwJGFLYsRixJHYklpgSY0tiRGLEafFltQCS2psSYxYjDgttqQWWFJjS2LEYsRpsSW15MsObEmMWIw4LbakFlhSY0tixGLEabEltcCSGlsSIxYjTostqQWW1NiSGLEYcVpsSS2wpMaWxIjFiNNiS2qBJTW2JEYsRpwWW1ILLKmxJTFiMeK02JIssCRjS2LEYsSx2JIssCRjS2LEYsSx2JIssCRjS2LEYsSx2JIssCRjS2LEYsSx/Kt7yXf32JIYsRhxLLYkCyzJ2JIYsRhxLLYkCyzJ2JIYsRhxLLYkCyzJ2JIYsRhxLLYkCyzJ2JIYsRhxLLYkCyzJ2JIYsRhxLLakEVjSYEtixGLEGbEljcCSBlsSIxYjzogtaQSWNNiSGLEYcQZbcjl4IPRQNffxwdpzsqkfj/2aL6NfHwzuHrX9indPFf9aNve74znZV1sfmr7N/dKabu/di7Y+xadIu6d5uydPq/KuagLg39/Wdfv8IkxweVz65j9QSwMEFAAAAAgAUqeYXKM/ula0BQAAjRUAABgAAAB4bC93b3Jrc2hlZXRzL3NoZWV0Mi54bWydWG1v2zYQ/iuCA6QtsEZ8FxknAVq33QZsQNDs5bNqK7FR28okZe7+/Y53lCI7ems/JJKP5B3veY53J14d8uJruc6yKvq22+7L69m6qh4v47hcrrNdWl7kj9keRu7zYpdW8LN4iMvHIktXuGi3jQVjJt6lm/3s5gplt8XNVf5UbTf77LaIyqfdLi3+e59t88P1jM9qwefNw7rygvjm6jF9yO6y6s/H2wJ+xY2W1WaX7ctNvo+K7P569l5cLgTzC3DGX5vsULbeo3KdH34uNqvfwDI4wmaRd+5Lnn/1w7+uvAjmZ9tsWXmlKTz+zRbZdns9e+d39g+aeYd7ihu97ffa3ieEA9z7kpbZIt/+vVlV6+uZnUWr7D592laf88MvWXBRe33LfFvi/+hAc8UsWj6VVb4La2EDu82enum3gEx7ft8CERaIkwWa9SyQYYFEP2lj6NWHtEpvror8EBWo1u9emlpL4w+AuPQz3sMUwDmZRSDd7D3hd1UBoxtQWN2cn3GROMfnUXR+ppJEufn5mRYiEXMvcDKRc/9UOvFPpR0OWMHxqZU0yq/gShsUMJ3gTGetRgFn1jUqvE7FpMAlzDA/YCRj86u4Ajf9nuIl/IF7jY+KfBQDPir00fb66AyYjHB7JjHkmVJ+4+TygHUdrIt+6xqtu17rjadgCrbx2sOmnUFQjLXzN8fmUemClHLWq/UFWcABkgUUCI5PoxgOSKnRmuJhpjASBQlXHCnguAIYMpaesL2LqEU8GkMjgiHhQjHCT1kVeCbig04NSslFRRHCLNi8GEDajCNtRpBWVpAx2BRDpD3PHnstlXHdSJsxpE/4Q4QZCRhjFNPCiWe7NEMdcRAOij8XahByWAJvlxF/y3+K3r1lfACyZByyZBQyjTx5/sxUyJLvC842DtzQALif9MQiIQcTbQ2laQR+ojaqPznVtlAu6awrHUxILYkMOn5aai3ItqPspWxiKFiPkxVYkJKiGp8ntA1QZMcpsqMUJQyNKaEnU2R/nKKpjIDznADWglZALFHdSJJwQBKr2nhS/m1li8k4ek/GyoCfM7EOQL0KRYj4dVKowG8yVA44H+fTzxkuCD6G0WvHLIWyrwN4KiArUMiG/XnMu/gNRnoJFuiM0Y2T7ep3nNFenwri00wan+aJ+DQq3+BIYN9yOqmQ7EKNDfahF8ABwxSv91FnRd30BE3+jHrz5BBDYgJDYvzI1Q2Ox/BFxHQyIsYLCVVon1VM+8idmGsDAZAxErBjLKGsokDbkEifd0pcakCVtGsnTavjatKeCnEBwYYpAJIJ7c/wwCTGZWsbnlH9fXTICXTI76vriJxkRylIidD0WJjZSY8czYhHVqAztnL+okAe5bA63ukkgG1HMPJwmAJXA9Wwfexate1HW7YhIvSEBKqnJtDeL4Mmk2LKR1CT4Yw6oe/jw43f3R8fbyPeSfpoc3fKTbdjF2v4isZDxoQNR8kex4DR9RESTRxSv8zmrxfrIt9l8cfVQ/am3W+EUCIjQyBN6PT4cKuHIIlOkEbbOSeDl5jrMXMY3pTNqPaoaVHQM+HmrQH8yvORA7pCE0a6tIRmZv4C234dY/3PMXAT+i8+3IAhcLITuNEmC5xV/cA9R19INdCwUiJx1B0pYVXTFhx9hbU/tobcdxPcd+Puq0733QT3WyWJKKX05VTIaxNJPz+z2oW2n76gKG5q6LSgcwfLWFM4B3qNAcwEG8dMsHHMdBdmYeFgFYKUQbWAWlMrybM6w0J5Mm5eOxQ1hf7V7YdPLzLzq4jqGguI2VBdCAowIY+wxSpC2cu+IKELs7h1J7XLige8qSujZf60r/zVTUsa7gfV5UL5O61Tub837JJzdrngrHNEwwje28XPpumi8ve0eNjsy2ib3cM22EUCha0gEulHlT/iXduXvAKC8XWdpaus8BNg/D7Pq/qHN9DcwN78D1BLAwQUAAAACABSp5hc09NETmUDAADQEwAADQAAAHhsL3N0eWxlcy54bWzdWEtu2zAQvYqgA1SylChWYRtonRgo0BYBkkW3tEXZBChRpejUzqpXKNAuC3TXA/RWTQ9RjihL/nACx02DJDIMkTN8M48zw4/dK9WS04sZpcpZZDwv++5MqeKl55WTGc1I+UIUNNeaVMiMKN2VU68sJCVJCaCMe4HvR15GWO4Oevk8G2WqdCZinqu+67veoJeKvJWcuEagh5KMOleE990h4WwsWTWWZIwvjTgAwURwIR2lqdC+2wFJeW3UHdMDlrWdjOVCgtAzHrb93Pz88uf7Z+f3rx83X7/BuHFtqXUkp2PN2g9Og9PuaMObfy+GR9WzO419DR+Guss8jw41fFikrKjqVWo047ypnGPXCAa9gihFZT7SnQpTCXdUTt2+XBa6dKaSLDvBsbs3oBScJeByOlyP2NnZyDcJ9Nag/2i0TcM9Gh2djLq3MK1eOsZjIRMqmygH7ko06HGaKg2XbDqDtxIFpFwoJTLdSBiZipxUKVgh1pFOtbP0XTXTO8PKzLZQ29wWGQfb0sZF3dDMJ5TzCxj1IW3odzT9ReqYbehNAjuQA8W0auo5101jxnTA/ro1Y3vd7GF2nYJdCfV6rieUV/2Pc6HouaQpW1T9RdoQwKx3WuvBlnVSFHz5irNpnlEz+b0dDnpkhXNmQrJr7Q2WISTOda6oVGwC/YkeQKXrsDypXUCsFinON2j5hut8O/+F74rfLuNPkhSXdLEX5xDJ4ANzflw0kVK4A8mjpxHLB6B5YCyPnsnaf6x8j59YfCP8pHlAvrad1asPzLVTeeNMbqQO3AX77nv4NcFbDs54zrhied2bsUTHZOdo1uYVGeufKxv29fiEpmTO1WWj7Ltt+x1N2DyLm1HnEJd6VNt+C9eTTtRckbUvSMyCJsO6q+9VGxcs81RXmy1Ne8vf1WAYo7NrfB+zhmFAbscYFObnOc2ni87H6DBuXaumi2K6KMagbJph9cH82DGxfuwzjeMwjCIsosOhlcEQi1sUwdduDeMGCMwPeLpbrPFs4xVyex1gOb2tQrCZ4pWIzRSPNWjscQNEHNuzjfkBBJYFrHbAv90P1JQdE4aQVYwbtoJxTRxjGqhFe41GERKdCD72/GCrJAzj2K4BnZ1BGGIaWI24BmMAHDBNGFbn4NZ55K3OKa/9D2/wF1BLAwQUAAAACABSp5hcl4q7HMAAAAATAgAACwAAAF9yZWxzLy5yZWxznZK5bsMwDEB/xdCeMAfQIYgzZfEWBPkBVqIP2BIFikWdv6/apXGQCxl5PTwS3B5pQO04pLaLqRj9EFJpWtW4AUi2JY9pzpFCrtQsHjWH0kBE22NDsFosPkAuGWa3vWQWp3OkV4hc152lPdsvT0FvgK86THFCaUhLMw7wzdJ/MvfzDDVF5UojlVsaeNPl/nbgSdGhIlgWmkXJ06IdpX8dx/aQ0+mvYyK0elvo+XFoVAqO3GMljHFitP41gskP7H4AUEsDBBQAAAAIAFKnmFwi9KQ6ZQEAALsCAAAPAAAAeGwvd29ya2Jvb2sueG1stVJNS8NAEP0rYX+ASYsWLI0Xi1oQLVZ63ySTZuh+hN1Nqz2KguDJg1fP4qmC/6r5EU4SggFBvHjZ2XmzvH3v7Y7W2iwjrZfejRTKhixzLh/6vo0zkNzu6RwUTVJtJHfUmoVvcwM8sRmAk8LvB8HAlxwVOxq1XFPjdxvtIHaoFYEVMEdY2+951XortBihQHcbsnovgHkSFUrcQBKygHk20+szbXCjleNiFhstRMh6zWAOxmH8A55VIq95ZGvE8eiKk5CQDQIiTNFYV5+o+TlpXAEdbrrC6RMUDsyYOzg1ushRLSoacuF3bNQ5tLUJcWj+EqNOU4xhrONCgnJNjgZEJVDZDHPLPMUlhGz3/lBut7Tunt4qW3TPJGksOtLWCcwMkQZmktQq/09R+fpc3n+UL4+7u8+Oov4vivp1bm1YCaSoILkgNks4PVw8NV5Vamf9/YPeIT1QIcQxYZfqXPOkzb79N0dfUEsDBBQAAAAIAFKnmFyN9yxatAAAAIkCAAAaAAAAeGwvX3JlbHMvd29ya2Jvb2sueG1sLnJlbHPFkk0KgzAQRq8ScoCO2tJFUVfduC1eIOj4g9GEzJTq7Wt1oYEuupGuwjch73swiR+oFbdmoKa1JMZeD5TIhtneAKhosFd0MhaH+aYyrlc8R1eDVUWnaoQoCK7g9gyZxnumyCeLvxBNVbUF3k3x7HHgL2B4GddRg8hS5MrVyImEUW9jguUITzNZiqxMpMvKUMK/hSJPKDpQiHjSSJvNmr3684H1PL/FrX2J69DfyeXjAN7PS99QSwMEFAAAAAgAUqeYXG6nJLweAQAAVwQAABMAAABbQ29udGVudF9UeXBlc10ueG1sxZTPTsMwDMZfpcp1ajJ24IDWXYAr7MALhNZdo+afYm90b4/bbpNAo2IqEpdGje3v5/iLsn47RsCsc9ZjIRqi+KAUlg04jTJE8BypQ3Ka+DftVNRlq3egVsvlvSqDJ/CUU68hNusnqPXeUvbc8Taa4AuRwKLIHsfEnlUIHaM1pSaOq4OvvlHyE0Fy5ZCDjYm44AShrhL6yM+AU93rAVIyFWRbnehFO85SnVVIRwsopyWu9Bjq2pRQhXLvuERiTKArbADIWTmKLqbJxBOG8Xs3mz/ITAE5c5tCRHYswe24syV9dR5ZCBKZ6SNeiCw9+3zQu11B9Us2j/cjpHbwA9WwzJ/xV48v+jf2sfrHPt5DaP/6qverdNr4M18N78nmE1BLAQIUAxQAAAAIAFKnmFxGx01IlQAAAM0AAAAQAAAAAAAAAAAAAACAAQAAAABkb2NQcm9wcy9hcHAueG1sUEsBAhQDFAAAAAgAUqeYXNZNAM3vAAAAKwIAABEAAAAAAAAAAAAAAIABwwAAAGRvY1Byb3BzL2NvcmUueG1sUEsBAhQDFAAAAAgAUqeYXJlcnCMQBgAAnCcAABMAAAAAAAAAAAAAAIAB4QEAAHhsL3RoZW1lL3RoZW1lMS54bWxQSwECFAMUAAAACABSp5hcFU7OYSwGAAA6LQAAGAAAAAAAAAAAAAAAgIEiCAAAeGwvd29ya3NoZWV0cy9zaGVldDEueG1sUEsBAhQDFAAAAAgAUqeYXKM/ula0BQAAjRUAABgAAAAAAAAAAAAAAICBhA4AAHhsL3dvcmtzaGVldHMvc2hlZXQyLnhtbFBLAQIUAxQAAAAIAFKnmFzT00ROZQMAANATAAANAAAAAAAAAAAAAACAAW4UAAB4bC9zdHlsZXMueG1sUEsBAhQDFAAAAAgAUqeYXJeKuxzAAAAAEwIAAAsAAAAAAAAAAAAAAIAB/hcAAF9yZWxzLy5yZWxzUEsBAhQDFAAAAAgAUqeYXCL0pDplAQAAuwIAAA8AAAAAAAAAAAAAAIAB5xgAAHhsL3dvcmtib29rLnhtbFBLAQIUAxQAAAAIAFKnmFyN9yxatAAAAIkCAAAaAAAAAAAAAAAAAACAAXkaAAB4bC9fcmVscy93b3JrYm9vay54bWwucmVsc1BLAQIUAxQAAAAIAFKnmFxupyS8HgEAAFcEAAATAAAAAAAAAAAAAACAAWUbAABbQ29udGVudF9UeXBlc10ueG1sUEsFBgAAAAAKAAoAhAIAALQcAAAAAA==';
+
+
+function setFormat(fmt){
+  outputFormat=fmt;
+  document.getElementById('fmt-pdf').classList.toggle('active', fmt==='pdf');
+  document.getElementById('fmt-ppt').classList.toggle('active', fmt==='ppt');
+  const btn=document.getElementById('gen-btn');
+  btn.innerHTML='<span>🏷</span> 명찰 생성하기';
+}
+
+function downloadSample(){
+  const bin=atob(SAMPLE_B64);
+  const ab=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) ab[i]=bin.charCodeAt(i);
+  const blob=new Blob([ab],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='명찰_표준양식.xlsx';a.click();
+  toast('📥 표준 양식 엑셀을 다운로드했습니다!');
+}
+
+function toggleStdMode(){
+  stdMode=document.getElementById('std-toggle').checked;
+  const info=document.getElementById('std-info');
+  const badge=document.getElementById('mode-badge');
+  const colSel=document.getElementById('col-selects');
+  info.style.display=stdMode?'block':'none';
+  badge.textContent=stdMode?'표준 모드':'자유 모드';
+  badge.style.background=stdMode?'rgba(124,106,247,.15)':'rgba(251,191,36,.15)';
+  badge.style.color=stdMode?'var(--accent2)':'var(--amber)';
+  badge.style.borderColor=stdMode?'rgba(124,106,247,.25)':'rgba(251,191,36,.25)';
+  if(colSel) colSel.style.display=stdMode?'none':'grid';
+  if(workbook) loadSheet();
+}
+const fontState={bold:{loaded:false,ab:null,name:''},regular:{loaded:false,ab:null,name:''}};
+const COLS=2,ROWS=3;
+
+// ── 폰트 업로드 ──
+async function handleFont(e,w){
+  const file=e.target.files[0]; if(!file)return;
+  const ab=await file.arrayBuffer();
+  fontState[w]={loaded:true,ab,name:file.name};
+
+  // base64 dataURL for FontFace
+  const bytes=new Uint8Array(ab);
+  let bin='';
+  for(let i=0;i<bytes.length;i+=8192) bin+=String.fromCharCode(...bytes.subarray(i,i+8192));
+  const b64=btoa(bin);
+  const mime=file.name.endsWith('.otf')?'opentype':file.name.endsWith('.woff2')?'woff2':file.name.endsWith('.woff')?'woff':'truetype';
+  const dataURL=`data:font/${mime};base64,${b64}`;
+  fontState[w].dataURL=dataURL;
+
+  // CSS FontFace 등록
+  const fam=w==='bold'?'CustomBold':'CustomReg';
+  try{
+    const ff=new FontFace(fam,`url(${dataURL})`,{weight:w==='bold'?'900':'400'});
+    const lf=await ff.load();
+    document.fonts.add(lf);
+  }catch(err){console.warn(err);}
+
+  document.getElementById(w==='bold'?'slot-bold':'slot-reg').classList.add('ok');
+  document.getElementById(w==='bold'?'fname-bold':'fname-reg').textContent=file.name.replace(/\.[^.]+$/,'');
+  updateFontStatus(); tryRender();
+}
+
+function updateFontStatus(){
+  const b=fontState.bold.loaded, r=fontState.regular.loaded;
+  const st=document.getElementById('font-status');
+  if(b&&r){st.textContent=`✅ Bold: ${fontState.bold.name}  /  Regular: ${fontState.regular.name}`;st.style.color='var(--green)';}
+  else if(b||r){st.textContent=`⚡ ${b?fontState.bold.name:fontState.regular.name} 로드됨 — 나머지 기본 폰트`;st.style.color='var(--amber)';}
+  else{st.textContent='기본 폰트 사용 중 (Noto Sans KR)';st.style.color='var(--muted)';}
+  document.getElementById('fp-name').style.fontFamily=b?"'CustomBold','Noto Sans KR',sans-serif":"'Noto Sans KR',sans-serif";
+  document.getElementById('fp-footer').style.fontFamily=r?"'CustomReg','Noto Sans KR',sans-serif":"'Noto Sans KR',sans-serif";
+}
+
+// ── 로고 업로드 ──
+setupDZ('logo-dz','logo-input','image/*',f=>{
+  if(!f||!f.type.startsWith('image/'))return;
+  toDataURL(f,url=>{
+    logoDataURL=url;
+    const p=document.getElementById('logo-preview');
+    p.src=url; p.style.display='block';
+    document.getElementById('logo-ph').style.display='none';
+    tryRender();
+  });
+});
+
+// ── 엑셀 업로드 ──
+setupDZ('excel-dz','excel-input','.xlsx,.xls,.csv',f=>{
+  if(!f)return;
+  document.getElementById('excel-fn').textContent=f.name;
+  const r=new FileReader();
+  r.onload=e=>{workbook=XLSX.read(e.target.result,{type:'array'});populateSheets();};
+  r.readAsArrayBuffer(f);
+});
+
+function populateSheets(){
+  const sel=document.getElementById('sheet-sel');
+  sel.innerHTML='';
+  workbook.SheetNames.forEach(n=>{const o=document.createElement('option');o.value=o.textContent=n;sel.appendChild(o);});
+  document.getElementById('sheet-sec').style.display='block';
+  // 자유 모드면 컬럼 선택 표시
+  const cs=document.getElementById('col-selects');
+  if(cs) cs.style.display=stdMode?'none':'grid';
+  loadSheet(); sel.onchange=loadSheet;
+}
+
+function loadSheet(){
+  const sheetName=document.getElementById('sheet-sel').value||workbook.SheetNames[0];
+  const sheet=workbook.Sheets[sheetName];
+  const raw=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''});
+  let hi=0,mx=0;
+  raw.forEach((row,i)=>{const f=row.filter(c=>c!=='').length;if(f>mx){mx=f;hi=i;}});
+  const headers=raw[hi].map(h=>String(h).trim()).filter(Boolean);
+  const dataRows=raw.slice(hi+1);
+
+  if(stdMode){
+    // 표준 모드: 이름/번호 헤더 직접 탐지
+    const hasName=headers.includes(STD_NAME),hasId=headers.includes(STD_ID);
+    if(hasName){
+      buildPStd(headers,dataRows,hasId);
+      if(!hasId) toast('⚡ "번호" 컬럼이 없어 이름만 표시됩니다.');
+    } else {
+      toast('⚠ 표준 헤더(이름)를 찾지 못했습니다. 자유 모드로 전환해 컬럼을 직접 선택하세요.');
+      document.getElementById('std-toggle').checked=false;
+      stdMode=false; toggleStdMode(); loadSheet();
+    }
+  } else {
+    // 자유 모드
+    ['name-col','id-col'].forEach((id,idx)=>{
+      const sel=document.getElementById(id),prev=sel.value;
+      sel.innerHTML=idx===1?'<option value="">— 없음 —</option>':'';
+      headers.forEach(h=>{const o=document.createElement('option');o.value=o.textContent=h;sel.appendChild(o);});
+      if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
+    });
+    const ns=document.getElementById('name-col'),ng=headers.find(h=>/성명|이름|name/i.test(h));if(ng)ns.value=ng;
+    const is=document.getElementById('id-col'),ig=headers.find(h=>/교번|번호|id/i.test(h));if(ig)is.value=ig;
+    ns.onchange=is.onchange=()=>buildPFree(headers,dataRows);
+    buildPFree(headers,dataRows);
+  }
+}
+
+function buildPStd(headers,dataRows,hasId){
+  const ni=headers.indexOf(STD_NAME),ii=hasId?headers.indexOf(STD_ID):-1;
+  participants=[];
+  dataRows.forEach(row=>{
+    const name=ni>=0?String(row[ni]??'').trim():'';
+    if(!name||name==='undefined')return;
+    const rawId=ii>=0?String(row[ii]??'').trim():'';
+    const id=(rawId&&rawId!=='undefined'&&rawId!=='nan')?rawId:'';
+    participants.push({name,id});
+  });
+  finalizeParse(STD_NAME,hasId?STD_ID:'');
+}
+
+function buildPFree(headers,dataRows){
+  const nc=document.getElementById('name-col').value,ic=document.getElementById('id-col').value;
+  const ni=headers.indexOf(nc),ii=ic?headers.indexOf(ic):-1;
+  participants=[];
+  dataRows.forEach(row=>{
+    const name=ni>=0?String(row[ni]??'').trim():'';
+    if(!name||name==='undefined')return;
+    const rawId=ii>=0?String(row[ii]??'').trim():'';
+    const id=(rawId&&rawId!=='undefined'&&rawId!=='nan')?rawId:'';
+    participants.push({name,id});
+  });
+  finalizeParse(nc,ic);
+}
+
+function buildP(headers,dataRows){ buildPFree(headers,dataRows); }
+
+function finalizeParse(nc,ic){
+  renderTbl(nc,ic);
+  document.getElementById('data-preview').style.display='block';
+  document.getElementById('total-count').textContent=participants.length+'명';
+  document.getElementById('gen-btn').disabled=participants.length===0;
+  tryRender();
+}
+
+function renderTbl(nc,ic){
+  const cols=ic?[nc,ic]:[nc];
+  document.getElementById('preview-table').innerHTML=
+    `<tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>`+
+    participants.slice(0,10).map(p=>`<tr><td>${p.name}</td>${ic?`<td>${p.id||'—'}</td>`:''}</tr>`).join('')+
+    (participants.length>10?`<tr><td colspan="${cols.length}" style="color:var(--muted);text-align:center">…외 ${participants.length-10}명</td></tr>`:'');
+}
+
+document.getElementById('org-name').addEventListener('input',tryRender);
+document.getElementById('course-name').addEventListener('input',tryRender);
+
+// ── Canvas 미리보기 ──
+function tryRender(){
+  if(participants.length===0)return;
+  pages=[];
+  for(let i=0;i<participants.length;i+=COLS*ROWS)pages.push(participants.slice(i,i+COLS*ROWS));
+  currentPage=0; renderPage(0);
+  document.getElementById('empty-state').style.display='none';
+  document.getElementById('canvas-wrap').style.display='block';
+  document.getElementById('preview-label').style.display='block';
+  document.getElementById('dl-btn').style.display='none';
+  updateNav();
+}
+
+function renderPage(pi){
+  const group=pages[pi]; if(!group)return;
+  const cv=document.getElementById('badge-canvas');
+  const W=794,H=1123; cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  const bw=10/21*W,bh=9/29.7*H;
+  const mx=(W-COLS*bw)/2,my=(H-ROWS*bh)/2;
+  group.forEach((p,i)=>{
+    drawCV(ctx,mx+(i%COLS)*bw,my+Math.floor(i/COLS)*bh,bw,bh,p.name,p.id);
+  });
+}
+
+function cfont(sz,w){
+  const fam=w==='bold'
+    ?(fontState.bold.loaded?"'CustomBold','Noto Sans KR',sans-serif":"'Noto Sans KR',sans-serif")
+    :(fontState.regular.loaded?"'CustomReg','Noto Sans KR',sans-serif":"'Noto Sans KR',sans-serif");
+  return `${w==='bold'?900:700} ${sz}px ${fam}`;
+}
+
+function drawCV(ctx,bx,by,bw,bh,name,bid){
+  const pad=bw*.035;
+  const org=document.getElementById('org-name').value.trim()||'기관명';
+  const crs=document.getElementById('course-name').value.trim()||'교육과정명';
+  ctx.strokeStyle='#ccc'; ctx.lineWidth=.7; ctx.strokeRect(bx,by,bw,bh);
+  const lh=bh*.11;
+  if(logoDataURL){
+    const img=new Image(); img.src=logoDataURL;
+    if(img.complete){// 가로 2.5cm 고정, 세로는 비율
+    const pxPerCm=bw/(10); // bw는 10cm
+    const fixedLw=LOGO_W_CM*pxPerCm;
+    const ar=img.naturalWidth/img.naturalHeight||3;
+    const fixedLh=fixedLw/ar;
+    ctx.drawImage(img,bx+pad,by+pad,fixedLw,fixedLh);}
+  }
+  const fh=bh*.22,lah=lh+pad*2.5,nfsz=bh*.30,ifsz=bh*.16;
+  const av=bh-fh-lah,nh=nfsz*.75,ih=bid?ifsz*1.1:0;
+  const bty=by+fh+(av-(nh+ih))/2+nh+ih;
+  ctx.fillStyle='#000'; ctx.textAlign='center';
+  ctx.font=cfont(nfsz,'bold');
+  ctx.fillText(name,bx+bw/2,bty-ih-nh+nh*.85);
+  if(bid){ctx.font=cfont(ifsz,'bold');ctx.fillText(`(${bid})`,bx+bw/2,bty-ih+ih*.85);}
+  const ffsz=bh*.065,lg=ffsz*1.55;
+  ctx.font=cfont(ffsz,'regular');
+  ctx.fillText(org,bx+bw/2,by+bh-pad-lg);
+  ctx.fillText(crs,bx+bw/2,by+bh-pad);
+}
+
+function updateNav(){
+  document.getElementById('page-nav').style.display=pages.length>1?'flex':'none';
+  document.getElementById('page-info').textContent=`${currentPage+1} / ${pages.length} 페이지`;
+  document.getElementById('prev-btn').disabled=currentPage===0;
+  document.getElementById('next-btn').disabled=currentPage===pages.length-1;
+}
+function changePage(d){currentPage=Math.max(0,Math.min(pages.length-1,currentPage+d));renderPage(currentPage);updateNav();}
+
+// ── PDF 생성 (로컬 폰트 임베딩) ──
+async function generateBadges(){
+  if(participants.length===0)return;
+  const btn=document.getElementById('gen-btn');
+  btn.disabled=true;btn.innerHTML='<span>⏳</span> 생성 중...';
+  const org=document.getElementById('org-name').value.trim()||'기관명';
+  const crs=document.getElementById('course-name').value.trim()||'교육과정명';
+  let logoImg=null,logoRatio=3;
+  if(logoDataURL){const img=new Image();await new Promise(r=>{img.onload=r;img.src=logoDataURL;});logoImg=img;logoRatio=img.naturalWidth/img.naturalHeight||3;}
+  if(outputFormat==='ppt'){
+    await generatePPT(org,crs,logoImg,logoRatio);
+  } else {
+    await generatePDF(org,crs,logoImg,logoRatio);
+  }
+  btn.disabled=false;
+  btn.innerHTML='<span>✅</span> 생성 완료! 다시 생성하기';
+  document.getElementById('dl-btn').style.display='flex';
+  toast(`✅ ${participants.length}명 명찰 생성 완료!`);
+}
+
+async function generatePDF(org,crs,logoImg,logoRatio){
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  if(fontState.bold.loaded){pdf.addFileToVFS('CB.ttf',ab2b64(fontState.bold.ab));pdf.addFont('CB.ttf','CB','normal');}
+  if(fontState.regular.loaded){pdf.addFileToVFS('CR.ttf',ab2b64(fontState.regular.ab));pdf.addFont('CR.ttf','CR','normal');}
+  const mx=(210-COLS*10)/2,my=(297-ROWS*9)/2;
+  for(let i=0;i<participants.length;i++){
+    const pos=i%(COLS*ROWS);if(pos===0&&i>0)pdf.addPage();
+    const col=pos%COLS,row=Math.floor(pos/COLS);
+    drawPDF(pdf,mx+col*10,my+row*9,10,9,participants[i].name,participants[i].id,org,crs,logoImg,logoRatio);
+  }
+  window._pdfBlob=pdf.output('blob');
+  window._outputFormat='pdf';
+}
+
+async function generatePPT(org,crs,logoImg,logoRatio){
+  if(!window.PptxGenJS){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js';
+      s.onload=res;s.onerror=rej;
+      document.head.appendChild(s);
+    });
+  }
+  const pptx=new window.PptxGenJS();
+  // 명찰 1장 크기: 가로 10cm × 세로 9cm → inch 단위 (1in=2.54cm)
+  pptx.defineLayout({name:'BADGE',width:3.937,height:3.543});
+  pptx.layout='BADGE';
+  for(let i=0;i<participants.length;i++){
+    const slide=pptx.addSlide();
+    await drawPPTSlide(pptx,slide,participants[i].name,participants[i].id,org,crs,logoImg,logoRatio);
+  }
+  const ab=await pptx.write({outputType:'arraybuffer'});
+  window._pdfBlob=new Blob([ab],{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
+  window._outputFormat='ppt';
+}
+
+async function drawPPTSlide(pptx,slide,name,bid,org,crs,logoImg,logoRatio){
+  const W=3.937,H=3.543; // inch
+  const pad=W*0.035;
+  // 테두리
+  slide.addShape(pptx.ShapeType.rect,{x:0,y:0,w:W,h:H,line:{color:'CCCCCC',width:0.5},fill:{type:'none'}});
+  // 로고
+  if(logoDataURL){
+    const fixedLw=2.5/2.54; // 2.5cm → inch 고정
+    const fixedLh=fixedLw/logoRatio;
+    slide.addImage({data:logoDataURL,x:pad,y:pad,w:fixedLw,h:fixedLh});
+  }
+  // 이름
+  const boldFont=fontState.bold.loaded?'CustomBold':'맑은 고딕';
+  slide.addText(name,{x:0,y:H*0.25,w:W,h:H*0.30,fontSize:36,fontFace:boldFont,bold:true,color:'000000',align:'center',valign:'middle'});
+  if(bid){
+    slide.addText('('+bid+')',{x:0,y:H*0.52,w:W,h:H*0.15,fontSize:20,fontFace:boldFont,bold:true,color:'000000',align:'center',valign:'middle'});
+  }
+  // 하단
+  const regFont=fontState.regular.loaded?'CustomReg':'맑은 고딕';
+  slide.addText([
+    {text:org,options:{breakLine:true}},
+    {text:crs,options:{}}
+  ],{x:0,y:H*0.74,w:W,h:H*0.24,fontSize:10,fontFace:regFont,bold:true,color:'000000',align:'center',valign:'middle',paraSpaceAfter:1});
+}
+
+
+function pfont(pdf,sz,w){
+  if(w==='bold'&&fontState.bold.loaded) pdf.setFont('CustomBold','normal');
+  else if(w==='regular'&&fontState.regular.loaded) pdf.setFont('CustomReg','normal');
+  else pdf.setFont('helvetica','bold');
+  pdf.setFontSize(sz*2.835);
+}
+
+function drawPDF(pdf,bx,by,bw,bh,name,bid,org,crs,logoImg,logoRatio){
+  const pad=bw*.035;
+  pdf.setDrawColor(190,190,190); pdf.setLineWidth(.2); pdf.rect(bx,by,bw,bh);
+  const lh=bh*.11;
+  if(logoImg&&logoDataURL){
+    const lw=25; // 2.5cm = 25mm 고정 (관리자 설정)
+    const lh=25/logoRatio;
+    const fmt=logoDataURL.startsWith('data:image/png')?'PNG':'JPEG';
+    try{pdf.addImage(logoDataURL,fmt,bx+pad,by+pad,lw,lh);}catch(e){try{pdf.addImage(logoDataURL,'PNG',bx+pad,by+pad,lw,lh);}catch(_){}}
+  }
+  const fh=bh*.22,lah=lh+pad*2.5,nfsz=bh*.26,ifsz=bh*.13;
+  const av=bh-fh-lah,nh=nfsz*.75,ih=bid?ifsz*1.2:0;
+  const bty=by+fh+(av-(nh+ih))/2+nh+ih;
+  const nb=bty-ih-nh+nh*.85;
+  pdf.setTextColor(0,0,0);
+  pfont(pdf,nfsz,'bold'); pdf.text(name,bx+bw/2,nb,{align:'center'});
+  if(bid){pfont(pdf,ifsz,'bold');pdf.text(`(${bid})`,bx+bw/2,bty-ih+ih*.85,{align:'center'});}
+  const ffsz=bh*.058,lg=ffsz*1.55;
+  pfont(pdf,ffsz,'regular');
+  pdf.text(org,bx+bw/2,by+bh-pad-lg,{align:'center'});
+  pdf.text(crs,bx+bw/2,by+bh-pad,{align:'center'});
+}
+
+function downloadPDF(){
+  if(!window._pdfBlob)return;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(window._pdfBlob);
+  const crs=document.getElementById('course-name').value||'출력';
+  a.download=window._outputFormat==='ppt'?`명찰_${crs}.pptx`:`명찰_${crs}.pdf`;
+  a.click();
+}
+
+// ── 유틸 ──
+function setupDZ(dzId,inputId,accept,handler){
+  const dz=document.getElementById(dzId),inp=document.getElementById(inputId);
+  inp.accept=accept; inp.onchange=e=>handler(e.target.files[0]);
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');handler(e.dataTransfer.files[0]);});
+}
+function toDataURL(file,cb){const r=new FileReader();r.onload=e=>cb(e.target.result);r.readAsDataURL(file);}
+function ab2b64(ab){let b='';const u=new Uint8Array(ab);for(let i=0;i<u.length;i+=8192)b+=String.fromCharCode(...u.subarray(i,i+8192));return btoa(b);}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3500);}
+</script>
+</body>
+</html>
