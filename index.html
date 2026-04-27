@@ -684,41 +684,58 @@ async function generatePPT(org,crs,logoImg,logoRatio){
     });
   }
   const pptx=new window.PptxGenJS();
-  // 명찰 1장 크기: 가로 10cm × 세로 9cm → inch 단위 (1in=2.54cm)
-  pptx.defineLayout({name:'BADGE',width:3.937,height:3.543});
-  pptx.layout='BADGE';
-  for(let i=0;i<participants.length;i++){
+  // A4 슬라이드: 21cm × 29.7cm → inch (1in=2.54cm)
+  const PAGE_W=8.268, PAGE_H=11.693;
+  pptx.defineLayout({name:'A4',width:PAGE_W,height:PAGE_H});
+  pptx.layout='A4';
+  // 명찰 1장: 10cm × 9cm
+  const BW=10/2.54, BH=9/2.54;
+  const mx=(PAGE_W-COLS*BW)/2, my=(PAGE_H-ROWS*BH)/2;
+  const perPage=COLS*ROWS;
+  const pageCount=Math.ceil(participants.length/perPage);
+  for(let p=0;p<pageCount;p++){
     const slide=pptx.addSlide();
-    await drawPPTSlide(pptx,slide,participants[i].name,participants[i].id,org,crs,logoImg,logoRatio);
+    const start=p*perPage;
+    const end=Math.min(start+perPage,participants.length);
+    for(let i=start;i<end;i++){
+      const pos=i-start;
+      const col=pos%COLS, row=Math.floor(pos/COLS);
+      drawPPTBadge(pptx,slide,mx+col*BW,my+row*BH,BW,BH,participants[i].name,participants[i].id,org,crs,logoImg,logoRatio);
+    }
   }
   const ab=await pptx.write({outputType:'arraybuffer'});
   window._pdfBlob=new Blob([ab],{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
   window._outputFormat='ppt';
 }
 
-async function drawPPTSlide(pptx,slide,name,bid,org,crs,logoImg,logoRatio){
-  const W=3.937,H=3.543; // inch
+function drawPPTBadge(pptx,slide,bx,by,W,H,name,bid,org,crs,logoImg,logoRatio){
   const pad=W*0.035;
+  // PPT는 폰트 임베딩 미지원 — 시스템에 설치된 폰트 이름만 참조 가능
+  // (사용자가 PDF용 커스텀 폰트를 올렸어도 PPT에서는 맑은 고딕으로 고정)
+  const FONT='맑은 고딕';
+  // 폰트 크기: PDF와 동일한 비례식 (font_pt = H_inch × 25.4 × 비율 × 2.835)
+  // 이름 0.26, 번호 0.13, 하단 0.058 비율 사용
+  const nameSize=Math.round(H*18.74);   // PDF의 nfsz와 일치 (≈66pt @ H=3.543")
+  const idSize=Math.round(H*9.37);      // ≈33pt
+  const footerSize=Math.round(H*4.18);  // ≈15pt
   // 테두리
-  slide.addShape(pptx.ShapeType.rect,{x:0,y:0,w:W,h:H,line:{color:'CCCCCC',width:0.5},fill:{type:'none'}});
+  slide.addShape(pptx.ShapeType.rect,{x:bx,y:by,w:W,h:H,line:{color:'CCCCCC',width:0.5},fill:{type:'none'}});
   // 로고
   if(logoDataURL){
     const fixedLw=2.5/2.54; // 2.5cm → inch 고정
     const fixedLh=fixedLw/logoRatio;
-    slide.addImage({data:logoDataURL,x:pad,y:pad,w:fixedLw,h:fixedLh});
+    slide.addImage({data:logoDataURL,x:bx+pad,y:by+pad,w:fixedLw,h:fixedLh});
   }
   // 이름
-  const boldFont=fontState.bold.loaded?'CustomBold':'맑은 고딕';
-  slide.addText(name,{x:0,y:H*0.25,w:W,h:H*0.30,fontSize:36,fontFace:boldFont,bold:true,color:'000000',align:'center',valign:'middle'});
+  slide.addText(name,{x:bx,y:by+H*0.25,w:W,h:H*0.30,fontSize:nameSize,fontFace:FONT,bold:true,color:'000000',align:'center',valign:'middle'});
   if(bid){
-    slide.addText('('+bid+')',{x:0,y:H*0.52,w:W,h:H*0.15,fontSize:20,fontFace:boldFont,bold:true,color:'000000',align:'center',valign:'middle'});
+    slide.addText('('+bid+')',{x:bx,y:by+H*0.52,w:W,h:H*0.15,fontSize:idSize,fontFace:FONT,bold:true,color:'000000',align:'center',valign:'middle'});
   }
   // 하단
-  const regFont=fontState.regular.loaded?'CustomReg':'맑은 고딕';
   slide.addText([
     {text:org,options:{breakLine:true}},
     {text:crs,options:{}}
-  ],{x:0,y:H*0.74,w:W,h:H*0.24,fontSize:10,fontFace:regFont,bold:true,color:'000000',align:'center',valign:'middle',paraSpaceAfter:1});
+  ],{x:bx,y:by+H*0.74,w:W,h:H*0.24,fontSize:footerSize,fontFace:FONT,bold:false,color:'000000',align:'center',valign:'middle',paraSpaceAfter:1});
 }
 
 
